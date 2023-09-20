@@ -7,3 +7,7 @@ pip install ç
 pip install typing-extensions
 pip install wheel
 
+
+Visual Studio Code is always asking for Git credentials
+git config --global credential.helper cache
+
