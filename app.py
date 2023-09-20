@@ -126,9 +126,14 @@ def transcribe_x(groups, output_path, file_mask):
     for i in range(len(groups)):
         audiof = os.path.join(output_path,  file_mask + str(i) + '.wav') 
         audio = whisperx.load_audio(audiof)
-        result = json.loads('{ "segments": [{ "text": "", "start": 0,"end": 0}], "language": "en"}')
+        #result = json.loads('{ "segments": [{ "text": "", "start": 0,"end": 0, "words": []}], "language": "en"}')
+        result = json.loads('{ "text": "","segments": [],"language": "en"}')
         try:
             result = model.transcribe(audio, batch_size=batch_size, language='en')
+            # 2. Align whisper output
+            model_a, metadata = whisperx.load_align_model(language_code=result["language"], device=device)
+            result = whisperx.align(result["segments"], model_a, metadata, audio, device, return_char_alignments=False)
+
         except Exception as e:
             print("Exception:" + str(e))
             pass  # or you could use 'continue
@@ -143,7 +148,16 @@ def transcribe_x(groups, output_path, file_mask):
 def timeStr(t):
     return '{0:02d}:{1:02d}:{2:06.3f}'.format(round(t // 3600), round(t % 3600 // 60), t % 60)
 
-def gen_html(groups, source_type, audio_title, spacermilli, output_path):
+def add_leading_space(str):
+  if str is None or str == '':
+      return str
+
+  if str[0] != ' ':
+    return ' ' + str
+  else:
+    return str
+
+def gen_html(groups, source_type, audio_title, spacermilli, output_path, file_mask):
     speakers = getSpeakersTemplate()
     def_boxclr = 'white'
     def_spkrclr = 'orange'
@@ -160,7 +174,7 @@ def gen_html(groups, source_type, audio_title, spacermilli, output_path):
 
         gidx += 1
 
-        captions = json.load(open(os.path.join(output_path, str(gidx) + '.json')))['segments']
+        captions = json.load(open(os.path.join(output_path, file_mask + str(gidx) + '.json')))['segments']
 
         if captions:
             speaker = g[0].split()[-1]
@@ -182,30 +196,36 @@ def gen_html(groups, source_type, audio_title, spacermilli, output_path):
                 for i, w in enumerate(c['words']):
                     if w == "":
                         continue
-                    start = (shift + w['start']*1000.0) / 1000.0
+                    
+                    if 'start' in w:
+                        start = (shift + w['start']*1000.0) / 1000.0
+                        #print(file_mask + str(gidx) + '.json: ' + str(w) + ' - start:' +str(start))
+                    else:
+                        start = shift / 1000.0   
+                        print(file_mask + str(gidx) + '.json: ' + str(w))
                     #end = (shift + w['end']) / 1000.0   #time resolution ot youtube is Second.
-                    html.append(f'<a href="#{timeStr(start)}" id="{"{:.1f}".format(round(start*5)/5)}" class="lt" onclick="jumptoTime({int(start)}, this.id)">{w["word"]}</a><!--\n\t\t\t\t-->')
+                    html.append(f'<a href="#{timeStr(start)}" id="{"{:.1f}".format(round(start*5)/5)}" class="lt" onclick="jumptoTime({int(start)}, this.id)">{add_leading_space(w["word"])}</a><!--\n\t\t\t\t-->')
             #html.append('\n')
             html.append('</p>\n')
             html.append(f'</div>\n')
 
     html.append(postS)
 
-    with open(os.path.join(output_path, "capspeaker.txt"), "w", encoding='utf-8') as file:
+    with open(os.path.join(output_path, "capspeaker"+file_mask+".txt"), "w", encoding='utf-8') as file:
         s = "".join(txt)
         file.write(s)
 
     if source_type == 'File':
         print(s)
-        with open(os.path.join(output_path, "capspeaker_audio.html"), "w", encoding='utf-8') as file:
+        with open(os.path.join(output_path, "capspeaker_audio"+file_mask+".html"), "w", encoding='utf-8') as file:
             s = "".join(html)
             file.write(s)
-            print(s)
+            #print(s)
     elif source_type == 'Youtube':
-        with open(os.path.join(output_path, "capspeaker_youtube.html"), "w", encoding='utf-8') as file:    #TODO: proper html embed tag when video/audio from file
+        with open(os.path.join(output_path, "capspeaker_youtube"+file_mask+".html"), "w", encoding='utf-8') as file:    #TODO: proper html embed tag when video/audio from file
             s = "".join(html)
             file.write(s)
-            print(s)
+            #print(s)
 
 
 #Main
@@ -245,8 +265,9 @@ def main():
         os.makedirs(output_path)
 
     #0. === Clean Output Dir === 
-    clean_dir(output_path, "split_*.json");
-    clean_dir(output_path, "split_*.wav");
+    clean_dir(output_path, tmp_mask+"*.wav");
+    #clean_dir(output_path, tmp_mask+"*.json");
+   
 
     #1. === Prepare Media === 
     # mediafile = load_media(input_file, output_file)
@@ -263,13 +284,13 @@ def main():
     groups = file_split(ready_wav, diarization_file, output_path, tmp_mask)
 
     #5. === Transcribe each split file ===
-    transcribe_x(groups, output_path, tmp_mask)
+    #transcribe_x(groups, output_path, tmp_mask)
 
     #Freeing up some memory
     # del   DEMO_FILE, pipeline, spacer,  audio, dz
 
     #6. === Generate output HTML ===
-    #gen_html(groups, source_type, audio_title, spacermilli, output_path)
+    gen_html(groups, source_type, audio_title, spacermilli, output_path, tmp_mask)
 
 if __name__ == '__main__':
     main()

@@ -132,7 +132,7 @@ def transcribe(groups, output_path, file_mask):
 def timeStr(t):
     return '{0:02d}:{1:02d}:{2:06.3f}'.format(round(t // 3600), round(t % 3600 // 60), t % 60)
 
-def gen_html(groups, source_type, audio_title, spacermilli, output_path):
+def gen_html(groups, source_type, audio_title, spacermilli, output_path, file_mask):
     speakers = getSpeakersTemplate()
     def_boxclr = 'white'
     def_spkrclr = 'orange'
@@ -149,7 +149,7 @@ def gen_html(groups, source_type, audio_title, spacermilli, output_path):
 
         gidx += 1
 
-        captions = json.load(open(os.path.join(output_path, str(gidx) + '.json')))['segments']
+        captions = json.load(open(os.path.join(output_path, file_mask + str(gidx) + '.json')))['segments']
 
         if captions:
             speaker = g[0].split()[-1]
@@ -180,18 +180,18 @@ def gen_html(groups, source_type, audio_title, spacermilli, output_path):
 
     html.append(postS)
 
-    with open(os.path.join(output_path, "capspeaker.txt"), "w", encoding='utf-8') as file:
+    with open(os.path.join(output_path, "capspeaker"+file_mask+".txt"), "w", encoding='utf-8') as file:
         s = "".join(txt)
         file.write(s)
 
     if source_type == 'File':
         print(s)
-        with open(os.path.join(output_path, "capspeaker_audio.html"), "w", encoding='utf-8') as file:
+        with open(os.path.join(output_path, "capspeaker_audio"+file_mask+".html"), "w", encoding='utf-8') as file:
             s = "".join(html)
             file.write(s)
             print(s)
     elif source_type == 'Youtube':
-        with open(os.path.join(output_path, "capspeaker_youtube.html"), "w", encoding='utf-8') as file:    #TODO: proper html embed tag when video/audio from file
+        with open(os.path.join(output_path, "capspeaker_youtube"+file_mask+".html"), "w", encoding='utf-8') as file:    #TODO: proper html embed tag when video/audio from file
             s = "".join(html)
             file.write(s)
             print(s)
@@ -234,8 +234,8 @@ def main():
         os.makedirs(output_path)
 
     #0. === Clean Output Dir === 
-    clean_dir(output_path, "split_*.json");
-    clean_dir(output_path, "split_*.wav");
+    clean_dir(output_path, tmp_mask+"*.wav");
+    #clean_dir(output_path, tmp_mask+"*.json");
 
     #1. === Prepare Media === 
     #load_media(input_file, output_file)
@@ -252,13 +252,13 @@ def main():
     groups = file_split(ready_wav, diarization_file, output_path, tmp_mask)
 
     #5. === Transcribe each split file ===
-    transcribe(groups, output_path, tmp_mask)
+    #transcribe(groups, output_path, tmp_mask)
 
     #Freeing up some memory
     # del   DEMO_FILE, pipeline, spacer,  audio, dz
 
     #6. === Generate output HTML ===
-    #gen_html(groups, source_type, audio_title, spacermilli, output_path)
+    gen_html(groups, source_type, audio_title, spacermilli, output_path, tmp_mask)
 
 if __name__ == '__main__':
     main()
