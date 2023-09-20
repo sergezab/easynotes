@@ -230,7 +230,7 @@ def main():
 
     groups = file_split(ready_wav, diarization_file, output_path)
 
-    #transcribe(groups, output_path)
+    transcribe(groups, output_path)
 
     #Freeing up some memory
     # del   DEMO_FILE, pipeline, spacer,  audio, dz
