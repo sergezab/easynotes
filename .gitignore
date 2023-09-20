@@ -2,6 +2,7 @@
 
 transcript*/
 input/
+output/
 ..ipynb_checkpoints/
 
 # Byte-compiled / optimized / DLL files
