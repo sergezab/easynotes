@@ -8,7 +8,7 @@ from pydub import AudioSegment
 from huggingface_hub import login, logout
 from pyannote.audio import Pipeline
 import locale, torch
-import whisperx
+import whisper
 import json
 from datetime import timedelta
 
@@ -114,30 +114,19 @@ def file_split(input_file, diarization_file, output_path, file_mask):
 locale.getpreferredencoding = lambda: "UTF-8"
 
 # Run whisper on all audio files. Whisper generates the transcription and writes it to a file.
-def transcribe_x(groups, output_path, file_mask): 
+def transcribe(groups, output_path, file_mask): 
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    batch_size = 16 # reduce if low on GPU mem
-    compute_type = "float16" # change to "int8" if low on GPU mem (may reduce accuracy)
-
-    model = whisperx.load_model("large-v2", "cuda", compute_type=compute_type)
+    model = whisper.load_model('large', device = device)
 
     import json
     for i in range(len(groups)):
-        audiof = os.path.join(output_path,  file_mask + str(i) + '.wav') 
-        audio = whisperx.load_audio(audiof)
-        result = json.loads('{ "segments": [{ "text": "", "start": 0,"end": 0}], "language": "en"}')
-        try:
-            result = model.transcribe(audio, batch_size=batch_size, language='en')
-        except Exception as e:
-            print("Exception:" + str(e))
-            pass  # or you could use 'continue
-
+        audiof = os.path.join(output_path, file_mask + str(i) + '.wav') 
+        result = model.transcribe(audio=audiof, language='en', word_timestamps=True)#, initial_prompt=result.get('text', ""))
         with open(os.path.join(output_path, file_mask + str(i)+'.json'), "w") as outfile:
             json.dump(result, outfile, indent=4)
 
     return outfile
-
 
 # Generating the HTML and/or txt file from the Transcriptions and the Diarization
 def timeStr(t):
@@ -232,7 +221,7 @@ def main():
     audio_title = "Transcription of Conversation"
     source_type = 'File'
     spacermilli = 2000
-    tmp_mask = 'splitX_'
+    tmp_mask = 'split_'
 
 
     print("app_path: " + app_path)
@@ -249,7 +238,7 @@ def main():
     clean_dir(output_path, "split_*.wav");
 
     #1. === Prepare Media === 
-    # mediafile = load_media(input_file, output_file)
+    #load_media(input_file, output_file)
     ready_wav = os.path.join(os.path.dirname(output_file), 'input_prep.wav')
    
     #2. === Add spacer at the beggining of the file ===
@@ -263,7 +252,7 @@ def main():
     groups = file_split(ready_wav, diarization_file, output_path, tmp_mask)
 
     #5. === Transcribe each split file ===
-    transcribe_x(groups, output_path, tmp_mask)
+    transcribe(groups, output_path, tmp_mask)
 
     #Freeing up some memory
     # del   DEMO_FILE, pipeline, spacer,  audio, dz
