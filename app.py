@@ -21,7 +21,7 @@ HUGGINGFACEHUB_API_TOKEN = os.getenv("HUGGINGFACEHUB_API_TOKEN")
 def load_media(input_file, output_file):
 
     #ffmpeg -i {repr(input_file)} -vn -acodec pcm_s16le -ar 16000 -ac 1 -y input.wav
-    ffmpeg.input(input_file).output(output_file, acodec='pcm_s16le', ar=16000, ac=1).run(overwrite_output=True)
+    ffmpeg.input(input_file).output(output_file, acodec='pcm_s16le', ar=16000, ac=1, af='silenceremove=1:0:-50dB').run(overwrite_output=True)
 
     print(output_file)
     return output_file
@@ -46,16 +46,21 @@ def diarize(access_token, input_file, output_file):
     else:
         login()
 
-    pipeline = Pipeline.from_pretrained('pyannote/speaker-diarization', use_auth_token= (access_token) or True )
-    DEMO_FILE = {'uri': 'blabla', 'audio': input_file}
-    dz = pipeline(DEMO_FILE)  
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    diarize_model = whisperx.DiarizationPipeline(use_auth_token=(access_token) or True, device=device)
+
+    audio = whisperx.load_audio(input_file)
+    diarize_segments = diarize_model(audio)
 
     with open(output_file, "w") as text_file:
-        text_file.write(str(dz))  
+        text_file.write(diarize_segments.to_string(header=False,index=False, columns=[0, 1, "speaker"]))  
 
-    print(*list(dz.itertracks(yield_label = True))[:10], sep="\n")
+        #q save pandas dataframe as  string and includ   columns 1,2,3
+        #text_file.write(diarize_segments.to_string(header=False,index=False, columns=[1,2,3]))
 
-    return 
+    #print(*list(diarize_segments.itertracks(yield_label = True))[:10], sep="\n")
+
+    return  
 
 
 #Preparing audio files according to the diarization¶
@@ -92,7 +97,8 @@ def file_split(input_file, diarization_file, output_path, file_mask):
     if g:
         groups.append(g)
 
-    #print(*groups, sep='\n')
+    with st.expander("segments"):
+        st.write(*groups, sep='\n')
 
     # Save the audio part corresponding to each diarization group.
     audio = AudioSegment.from_wav(input_file)
@@ -105,7 +111,8 @@ def file_split(input_file, diarization_file, output_path, file_mask):
         end = millisec(end)  #- spacermilli
         gidx += 1
         audio[start:end].export(output_path + file_mask + str(gidx) + '.wav', format='wav')
-        print(f"group {gidx}: {start}--{end}")
+        with st.expander("groups"):
+            st.write(f"group {gidx}: {start}--{end}")
 
     return groups
 
@@ -135,7 +142,7 @@ def transcribe_x(groups, output_path, file_mask):
             result = whisperx.align(result["segments"], model_a, metadata, audio, device, return_char_alignments=False)
 
         except Exception as e:
-            print("Exception:" + str(e))
+            st.error("Exception:" + str(e))
             pass  # or you could use 'continue
 
         with open(os.path.join(output_path, file_mask + str(i)+'.json'), "w") as outfile:
@@ -202,7 +209,7 @@ def gen_html(groups, source_type, audio_title, spacermilli, output_path, file_ma
                         #print(file_mask + str(gidx) + '.json: ' + str(w) + ' - start:' +str(start))
                     else:
                         start = shift / 1000.0   
-                        print(file_mask + str(gidx) + '.json: ' + str(w))
+                        st.info(file_mask + str(gidx) + '.json: ' + str(w))
                     #end = (shift + w['end']) / 1000.0   #time resolution ot youtube is Second.
                     html.append(f'<a href="#{timeStr(start)}" id="{"{:.1f}".format(round(start*5)/5)}" class="lt" onclick="jumptoTime({int(start)}, this.id)">{add_leading_space(w["word"])}</a><!--\n\t\t\t\t-->')
             #html.append('\n')
@@ -216,7 +223,8 @@ def gen_html(groups, source_type, audio_title, spacermilli, output_path, file_ma
         file.write(s)
 
     if source_type == 'File':
-        print(s)
+        with st.expander ("transcript"):
+            st.write(s)
         with open(os.path.join(output_path, "capspeaker_audio"+file_mask+".html"), "w", encoding='utf-8') as file:
             s = "".join(html)
             file.write(s)
@@ -233,7 +241,7 @@ def gen_html(groups, source_type, audio_title, spacermilli, output_path, file_ma
 def clean_dir(dir, mask):
     # Getting All Files List
     file_mask = os.path.abspath(dir) + '/' + mask
-    print("Removing files:" + file_mask)
+    st.info("Removing files:" + file_mask)
     fileList = glob.glob(file_mask, recursive=True)
 
     for item in fileList:
@@ -241,56 +249,62 @@ def clean_dir(dir, mask):
     
 
 def main():
-    file_to_convert = "AppRecording-20230915-1004.mp3"
-    app_path = os.getcwd()
 
-    output_path = os.path.join(os.path.abspath(app_path), "output/" + file_to_convert.split('.')[0]  + "/")
-    input_path = os.path.join(os.path.abspath(app_path), "input/")
-    input_file = os.path.join(input_path, file_to_convert)
-    output_file = os.path.join(output_path, 'input.wav')
-    diarization_file = os.path.join(output_path, 'diarization.txt')
+    app_path = os.getcwd()
+    st.set_page_config(page_title="audio transcribe", page_icon="@")
+    st.header("Turn audio into diadarized transcription")    
+    uploaded_file = st.file_uploader("Choose an audio file...", type="mp3")
     audio_title = "Transcription of Conversation"
     source_type = 'File'
     spacermilli = 2000
     tmp_mask = 'splitX_'
 
+    if uploaded_file is not None:
+        st.info(uploaded_file)
 
-    print("app_path: " + app_path)
-    print("input_path: " + input_path)
-    print("input-file: " + input_file)
-    print("output_path: " + output_path)
-    print("output_file: " + output_file)
+        #q: remote special characteers except . and spaces from file name
+        file_to_convert = re.sub('[^A-Za-z0-9]+', '', uploaded_file.name.split('.')[0])
 
-    if not os.path.exists(output_path):
-        os.makedirs(output_path)
+        output_path = os.path.join(os.path.abspath(app_path), "output/" + file_to_convert.split('.')[0]  + "/")
+        output_file = os.path.join(output_path, 'input.wav')
+        input_file = os.path.join(output_path, uploaded_file.name) 
 
-    #0. === Clean Output Dir === 
-    clean_dir(output_path, tmp_mask+"*.wav");
-    #clean_dir(output_path, tmp_mask+"*.json");
-   
+        st.info(input_file)
 
-    #1. === Prepare Media === 
-    # mediafile = load_media(input_file, output_file)
-    ready_wav = os.path.join(os.path.dirname(output_file), 'input_prep.wav')
-   
-    #2. === Add spacer at the beggining of the file ===
-    #ready_wav = append_spacer(output_file, spacermilli)
-    print("ready_wav:" + ready_wav)
+        if not os.path.exists(output_path): os.makedirs(output_path)
 
-    #3. === Identify Speakers ===
-    #diarize(HUGGINGFACEHUB_API_TOKEN, ready_wav, diarization_file)
+        bytes_data = uploaded_file.getvalue ()
+        with open (input_file, "wb") as file:
+            file.write(bytes_data)
 
-    #4. === Split Input file based on speakers information ===
-    groups = file_split(ready_wav, diarization_file, output_path, tmp_mask)
+        #0. === Clean Output Dir === 
+        clean_dir(output_path, tmp_mask+"*.wav");
+        clean_dir(output_path, tmp_mask+"*.json");
+    
+        #1. === Prepare Media === 
+        ready_wav = load_media(input_file, output_file)
+        #ready_wav = os.path.join(os.path.dirname(output_file), 'input_prep.wav')
 
-    #5. === Transcribe each split file ===
-    #transcribe_x(groups, output_path, tmp_mask)
+        #2. === Add spacer at the beggining of the file ===
+        ready_wav = append_spacer(output_file, spacermilli)
+        st.info("ready_wav:" + ready_wav)
 
-    #Freeing up some memory
-    # del   DEMO_FILE, pipeline, spacer,  audio, dz
+        #3. === Identify Speakers ===
+        diarization_file = os.path.join(output_path, 'diarization.txt')
+        diarize(HUGGINGFACEHUB_API_TOKEN, ready_wav, diarization_file)
 
-    #6. === Generate output HTML ===
-    gen_html(groups, source_type, audio_title, spacermilli, output_path, tmp_mask)
+        #4. === Split Input file based on speakers information ===
+        groups = file_split(ready_wav, diarization_file, output_path, tmp_mask)
+
+        #5. === Transcribe each split file ===
+        transcribe_x(groups, output_path, tmp_mask)
+
+        #Freeing up some memory
+        # del   DEMO_FILE, pipeline, spacer,  audio, dz
+
+        #6. === Generate output HTML ===
+        gen_html(groups, source_type, audio_title, spacermilli, output_path, tmp_mask)
+           
 
 if __name__ == '__main__':
     main()

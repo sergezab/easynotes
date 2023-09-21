@@ -21,7 +21,7 @@ HUGGINGFACEHUB_API_TOKEN = os.getenv("HUGGINGFACEHUB_API_TOKEN")
 def load_media(input_file, output_file):
 
     #ffmpeg -i {repr(input_file)} -vn -acodec pcm_s16le -ar 16000 -ac 1 -y input.wav
-    ffmpeg.input(input_file).output(output_file, acodec='pcm_s16le', ar=16000, ac=1).run(overwrite_output=True)
+    ffmpeg.input(input_file).output(output_file, acodec='pcm_s16le', ar=16000, ac=1, af='silenceremove=1:0:-50dB').run(overwrite_output=True)
 
     print(output_file)
     return output_file
@@ -46,14 +46,19 @@ def diarize(access_token, input_file, output_file):
     else:
         login()
 
-    pipeline = Pipeline.from_pretrained('pyannote/speaker-diarization', use_auth_token= (access_token) or True )
-    DEMO_FILE = {'uri': 'blabla', 'audio': input_file}
-    dz = pipeline(DEMO_FILE)  
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    diarize_model = whisperx.DiarizationPipeline(use_auth_token=(access_token) or True, device=device)
+
+    audio = whisperx.load_audio(input_file)
+    diarize_segments = diarize_model(audio)
 
     with open(output_file, "w") as text_file:
-        text_file.write(str(dz))  
+        text_file.write(diarize_segments.to_string(header=False,index=False, columns=[0, 1, "speaker"]))  
 
-    print(*list(dz.itertracks(yield_label = True))[:10], sep="\n")
+        #q save pandas dataframe as  string and includ   columns 1,2,3
+        #text_file.write(diarize_segments.to_string(header=False,index=False, columns=[1,2,3]))
+
+    #print(*list(diarize_segments.itertracks(yield_label = True))[:10], sep="\n")
 
     return 
 
@@ -241,7 +246,7 @@ def clean_dir(dir, mask):
     
 
 def main():
-    file_to_convert = "AppRecording-20230915-1004.mp3"
+    file_to_convert = "App Recording 20230914 1404.mp3"
     app_path = os.getcwd()
 
     output_path = os.path.join(os.path.abspath(app_path), "output/" + file_to_convert.split('.')[0]  + "/")
@@ -266,25 +271,25 @@ def main():
 
     #0. === Clean Output Dir === 
     clean_dir(output_path, tmp_mask+"*.wav");
-    #clean_dir(output_path, tmp_mask+"*.json");
+    clean_dir(output_path, tmp_mask+"*.json");
    
 
     #1. === Prepare Media === 
-    # mediafile = load_media(input_file, output_file)
-    ready_wav = os.path.join(os.path.dirname(output_file), 'input_prep.wav')
+    mediafile = load_media(input_file, output_file)
+    #ready_wav = os.path.join(os.path.dirname(output_file), 'input_prep.wav')
    
     #2. === Add spacer at the beggining of the file ===
-    #ready_wav = append_spacer(output_file, spacermilli)
+    ready_wav = append_spacer(output_file, spacermilli)
     print("ready_wav:" + ready_wav)
 
     #3. === Identify Speakers ===
-    #diarize(HUGGINGFACEHUB_API_TOKEN, ready_wav, diarization_file)
+    diarize(HUGGINGFACEHUB_API_TOKEN, ready_wav, diarization_file)
 
     #4. === Split Input file based on speakers information ===
     groups = file_split(ready_wav, diarization_file, output_path, tmp_mask)
 
     #5. === Transcribe each split file ===
-    #transcribe_x(groups, output_path, tmp_mask)
+    transcribe_x(groups, output_path, tmp_mask)
 
     #Freeing up some memory
     # del   DEMO_FILE, pipeline, spacer,  audio, dz
