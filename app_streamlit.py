@@ -1,6 +1,6 @@
 from dotenv import find_dotenv, load_dotenv
 import requests, os, glob
-from htmlTemplates import getHtmlTemplate, getHtmlStreamlitTemplate, getSpeakersTemplate
+from htmlTemplates import getHtmlTemplate, getHtmlStreamlitTemplate, getSpeakersTemplate, getHtmlTest
 import streamlit as st
 import streamlit.components.v1 as components
 import ffmpeg
@@ -99,7 +99,7 @@ def file_split(input_file, diarization_file, output_path, file_mask):
         groups.append(g)
 
     with st.expander("segments"):
-        st.write(*groups, sep='\n')
+        st.write(*groups)
 
     # Save the audio part corresponding to each diarization group.
     audio = AudioSegment.from_wav(input_file)
@@ -165,12 +165,12 @@ def add_leading_space(str):
   else:
     return str
 
-def gen_html(groups, source_type, audio_title, spacermilli, output_path, file_mask, self_hosted):
+def gen_html(groups, source_type, audio_title, audio_file_name, spacermilli, output_path, file_mask, self_hosted):
     speakers = getSpeakersTemplate()
     def_boxclr = 'white'
     def_spkrclr = 'orange'
     
-    preS = getHtmlTemplate(audio_title)
+    preS = getHtmlTemplate(audio_title, audio_file_name)
     if not self_hosted:
         preS = getHtmlStreamlitTemplate(audio_title)
 
@@ -178,6 +178,8 @@ def gen_html(groups, source_type, audio_title, spacermilli, output_path, file_ma
     html = list(preS)
     txt = list("")
     gidx = -1
+
+    html.append(f'<div id="mainTranscription">\n')
 
     for g in groups:
         shift = re.findall('[0-9]+:[0-9]+:[0-9]+\.[0-9]+', string=g[0])[0]
@@ -214,13 +216,14 @@ def gen_html(groups, source_type, audio_title, spacermilli, output_path, file_ma
                         #print(file_mask + str(gidx) + '.json: ' + str(w) + ' - start:' +str(start))
                     else:
                         start = shift / 1000.0   
-                        st.info(file_mask + str(gidx) + '.json: ' + str(w))
+                        #st.info(file_mask + str(gidx) + '.json: ' + str(w))
                     #end = (shift + w['end']) / 1000.0   #time resolution ot youtube is Second.
-                    html.append(f'<a href="#{timeStr(start)}" id="{"{:.1f}".format(round(start*5)/5)}" class="lt" onclick="jumptoTime({int(start)}, this.id)">{add_leading_space(w["word"])}</a><!--\n\t\t\t\t-->')
+                    html.append(f'<a href="#{timeStr(start)}" id="{"{:.1f}".format(round(start*5)/5)}" class="lt" onclick="jumptoTime({int(start)}, this.id, event)">{add_leading_space(w["word"])}</a><!--\n\t\t\t\t-->')
             #html.append('\n')
             html.append('</p>\n')
             html.append(f'</div>\n')
 
+    html.append(f'</div>\n')
     if self_hosted: 
         html.append(postS)
     else: 
@@ -237,8 +240,8 @@ def gen_html(groups, source_type, audio_title, spacermilli, output_path, file_ma
         out_file = file.name
 
     if source_type == 'File':
-        with st.expander ("transcript"):
-            st.write(s)
+        if not self_hosted: 
+            with st.expander ("transcript"): st.write(s)
         with open(os.path.join(output_path, "capspeaker_audio"+file_mask+file_prefix+".html"), "w", encoding='utf-8') as file:
             s = "".join(html)
             file.write(s)
@@ -267,40 +270,54 @@ def clean_dir(dir, mask):
 
 def main():
 
+    # --- Initialising SessionState ---
+    if "load_state" not in st.session_state:
+        st.session_state.load_state = False
+  
+
     app_path = os.getcwd()
-    st.set_page_config(page_title="audio transcribe", page_icon="@")
+    st.set_page_config(page_title="audio transcribe", page_icon="@", layout="wide")
     st.header("Turn audio into diadarized transcription")    
-    uploaded_file = st.file_uploader("Choose an audio file...", type="mp3")
+    #height = st.sidebar.slider("Height", 200, 1500, 300, 100)
+    #width = st.sidebar.slider("Width", 200, 1500, 600, 100)
+
+    #uploaded_file = st.file_uploader("Choose an audio file...", type="mp3")
     audio_title = "Transcription of Conversation"
     source_type = 'File'
     spacermilli = 2000
     tmp_mask = 'splitX_'
     embeded_html_prefix = "SLT"
 
-    if uploaded_file is not None:
-        st.info(uploaded_file)
+    if st.button("Transcribe") or st.session_state.load_state:
 
+        st.session_state.load_state = True
         #q: remote special characteers except . and spaces from file name
-        file_to_convert = re.sub('[^A-Za-z0-9]+', '', uploaded_file.name.split('.')[0])
+        #file_to_convert = re.sub('[^A-Za-z0-9]+', '', uploaded_file.name.split('.')[0])
+
+        file_to_convert = 'AppRecording-20230915-1004.mp3'
 
         output_path = os.path.join(os.path.abspath(app_path), "output/" + file_to_convert.split('.')[0]  + "/")
-        output_file = os.path.join(output_path, 'input.wav')
-        input_file = os.path.join(output_path, uploaded_file.name) 
+        output_file_name = file_to_convert.split('.')[0] + '.wav'
+        output_file = os.path.join(output_path, output_file_name)
+        
+
+        input_path = os.path.join(os.path.abspath(app_path), "input/")
+        input_file = os.path.join(input_path, file_to_convert)
 
         st.info(input_file)
 
         if not os.path.exists(output_path): os.makedirs(output_path)
 
-        bytes_data = uploaded_file.getvalue ()
-        with open (input_file, "wb") as file:
-            file.write(bytes_data)
-
+        #bytes_data = uploaded_file.getvalue ()
+        #with open (input_file, "wb") as file:
+        #    file.write(bytes_data)
+        
         #0. === Clean Output Dir === 
-        clean_dir(output_path, tmp_mask+"*.wav");
-        clean_dir(output_path, tmp_mask+"*.json");
+        #clean_dir(output_path, tmp_mask+"*.wav");
+        #clean_dir(output_path, tmp_mask+"*.json");
     
         #1. === Prepare Media === 
-        ready_wav = load_media(input_file, output_file)
+        #ready_wav = load_media(input_file, output_file)
         #ready_wav = os.path.join(os.path.dirname(output_file), 'input_prep.wav')
 
         #2. === Add spacer at the beggining of the file ===
@@ -309,21 +326,39 @@ def main():
 
         #3. === Identify Speakers ===
         diarization_file = os.path.join(output_path, 'diarization.txt')
-        diarize(HUGGINGFACEHUB_API_TOKEN, ready_wav, diarization_file)
+        #diarize(HUGGINGFACEHUB_API_TOKEN, ready_wav, diarization_file)
 
         #4. === Split Input file based on speakers information ===
         groups = file_split(ready_wav, diarization_file, output_path, tmp_mask)
 
         #5. === Transcribe each split file ===
-        transcribe_x(groups, output_path, tmp_mask)
+        #transcribe_x(groups, output_path, tmp_mask)
 
         #Freeing up some memory
         # del   DEMO_FILE, pipeline, spacer,  audio, dz
 
         #6. === Generate output HTML ===
-        html_file = gen_html(groups, source_type, audio_title, spacermilli, output_path, tmp_mask, True)
+        html_file = gen_html(groups, source_type, audio_title, output_file_name, spacermilli, output_path, tmp_mask, True)
 
-        html_file = gen_html(groups, source_type, audio_title, spacermilli, output_path, tmp_mask, False)
+        with open(html_file, "rb") as file:
+            btn = st.download_button(
+                label="Download Transcript",
+                data=file,
+                file_name=output_file_name.split('.')[0]+'.html',
+                mime='text/html',
+            )
+
+        with open(output_file, "rb") as file:
+            btn = st.download_button(
+                label="Download Audio",
+                data=file,
+                file_name=output_file_name,
+                mime='audio/wav',
+            )
+
+        html_file = gen_html(groups, source_type, audio_title, output_file_name, spacermilli, output_path, tmp_mask, False)
+
+
 
         audio_file = open(output_file, 'rb')
         audio_bytes = audio_file.read()
@@ -332,7 +367,13 @@ def main():
 
         p = open(html_file)
         components.html(p.read(), width=None, height=600, scrolling=True)
-        #st.components.v1.iframe(html_file, width=None, height=600)
+
+
+
+
+
+        #html = getHtmlTest()
+        #components.html(html, width=None, height=600, scrolling=True)
            
 
 if __name__ == '__main__':
