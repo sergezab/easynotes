@@ -54,8 +54,10 @@ def diarize(access_token, input_file, output_file):
     audio = whisperx.load_audio(input_file)
     diarize_segments = diarize_model(audio)
 
+    columns_to_export = diarize_segments.columns[[0, 1]].tolist() + ['speaker']
     with open(output_file, "w") as text_file:
-        text_file.write(diarize_segments.to_string(header=False,index=False, columns=[0, 1, "speaker"]))  
+        text_file.write(diarize_segments.to_string(header=False, index=False, columns=columns_to_export))
+        #text_file.write(diarize_segments.to_string(header=False,index=False, columns=[0, 1, "speaker"]))  
 
         #q save pandas dataframe as  string and includ   columns 1,2,3
         #text_file.write(diarize_segments.to_string(header=False,index=False, columns=[1,2,3]))
@@ -218,6 +220,9 @@ def gen_html(groups, source_type, audio_title, audio_file_name, spacermilli, out
                 end = (shift + c['end'] * 1000.0) / 1000.0
                 txt.append(f'[{timeStr(start)} --> {timeStr(end)}] [{speaker}] {c["text"]}\n')
 
+                if (len(c['words']) == 0):
+                  html.append(f'<a href="#{timeStr(start)}" id="{"{:.1f}".format(round(start*5)/5)}" class="lt" onclick="jumptoTime({int(start)}, this.id, event)">{add_leading_space(c["text"])}</a><!--\n\t\t\t\t-->')
+
                 for i, w in enumerate(c['words']):
                     if w == "":
                         continue
@@ -289,7 +294,7 @@ def main():
     app_path = os.getcwd()
     st.set_page_config(page_title="audio transcribe", page_icon="@", layout="wide")
     st.header("Turn audio into diadarized transcription")    
-    uploaded_file = st.file_uploader("Choose an audio file...", type="mp3")
+    uploaded_file = st.file_uploader("Choose an audio file...", type=["mp3","m4a","wav"])
     audio_title = "Transcription of Conversation"
     source_type = 'File'
     spacermilli = 2000
@@ -313,6 +318,7 @@ def main():
 
             st.write(input_file)
 
+            #if st.session_state['uploaded_file'] != uploaded_file.name or not os.path.exists(output_path):
             if st.session_state['uploaded_file'] != uploaded_file.name or not os.path.exists(output_path):
                 st.session_state['uploaded_file'] = uploaded_file.name
                 st.session_state['load_state'] = True
