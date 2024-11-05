@@ -11,3 +11,7 @@ pip install wheel
 Visual Studio Code is always asking for Git credentials
 git config --global credential.helper cache
 
+
+
+#docker run -it --rm --mount type=bind,source=/home/astra/.cache,target=/app/.cache -d  -p 8501:8501 -u 1001 easynotes-app
+
