@@ -8,7 +8,7 @@ import ffmpeg
 import re
 from pydub import AudioSegment
 from huggingface_hub import login, logout
-from pyannote.audio import Pipeline
+#from pyannote.audio import Pipeline
 import locale, torch
 import whisperx
 import json

@@ -1,19 +1,19 @@
-#pip3 install -r requirements.txt
+#1. sudo apt update
+#2. sudo apt install ffmpeg
+#3. pip3 install -r requirements.txt
+
+torch==2.2.1
+torchvision==0.17.1+cu121
+torchaudio==2.2.1
+whisperx
+streamlit==1.41.1
 python-dotenv
-streamlit
 ffmpeg-python
 pydub
 huggingface_hub
-pyannote.audio
-chardet
-#git+https://github.com/openai/whisper.
-#conda install pytorch torchvision torchaudio pytorch-cuda=11.7 -c pytorch -c nvidia
-#torch==1.11.0 
-#torchvision==0.12.0 
-#torchaudio==0.11.0
-#numpy==1.24
 
-git+https://github.com/m-bain/whisperx.git
+
+#git+https://github.com/m-bain/whisperx.git
 #check https://pytorch.org for the latest install command for linux/Conda/Python/Cuda 12.1
 #conda install pytorch==2.0.0 torchaudio==2.0.0 pytorch-cuda=11.8 -c pytorch -c nvidia
 
